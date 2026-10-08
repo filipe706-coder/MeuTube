@@ -70,7 +70,7 @@ object YouTubeRepo {
             uploader = info.uploaderName ?: "",
             uploaderUrl = info.uploaderUrl ?: "",
             uploaderAvatar = info.uploaderAvatars.best(),
-            description = info.description?.content() ?: "",
+            description = info.description?.content ?: "",
             thumbnail = info.thumbnails.best(),
             qualities = qualities,
             related = info.relatedItems.filterIsInstance<StreamInfoItem>().map { it.toVideoItem() },
