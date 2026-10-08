@@ -5,6 +5,9 @@ on:
   push:
   workflow_dispatch:
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -31,3 +34,13 @@ jobs:
         with:
           name: MeuTube-apk
           path: app/build/outputs/apk/debug/app-debug.apk
+      # Publica o APK numa Release chamada "latest" (substitui a anterior),
+      # para o descarregares direto no telemóvel, sem .zip
+      - name: Publicar APK
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk MeuTube.apk
+          gh release delete latest --yes --cleanup-tag || true
+          gh release create latest MeuTube.apk --title "MeuTube (última versão)" --notes "Build automático do commit ${GITHUB_SHA::7}"
