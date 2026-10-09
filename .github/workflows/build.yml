@@ -1,8 +1,18 @@
-# Compila o APK na cloud do GitHub sempre que fazes push.
-# Depois vais a Actions -> último build -> "MeuTube-apk" para descarregar.
+# Compila o APK na cloud do GitHub e publica-o na Release "latest".
+#
+# Corre em três situações:
+#  1. push        -> sempre que há alterações ao código
+#  2. schedule    -> todos os dias às 6h: vê se saiu uma versão nova do
+#                    NewPipeExtractor (sai quando o YouTube muda algo e parte
+#                    as apps). Se saiu, atualiza a app e gera APK novo.
+#                    Se não saiu, não faz nada.
+#  3. manual      -> botão "Run workflow" no separador Actions
 name: Build APK
 on:
   push:
+    branches: [main]
+  schedule:
+    - cron: "0 5 * * *" # 05:00 UTC = 06:00 em Portugal (horário de verão)
   workflow_dispatch:
 
 permissions:
@@ -13,12 +23,49 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # ----- Passo de atualização automática do extractor -----
+      - name: Verificar nova versão do extractor
+        id: extractor
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          FILE=app/build.gradle.kts
+          current=$(grep -oP 'NewPipeExtractor:\K[^"]+' $FILE)
+          latest=$(gh api repos/TeamNewPipe/NewPipeExtractor/releases/latest -q .tag_name || true)
+          echo "Atual: $current | Mais recente: $latest"
+
+          if [ -n "$latest" ] && [ "$current" != "$latest" ]; then
+            sed -i "s/NewPipeExtractor:$current/NewPipeExtractor:$latest/" $FILE
+            echo "updated=true" >> $GITHUB_OUTPUT
+            echo "version=$latest" >> $GITHUB_OUTPUT
+          else
+            echo "updated=false" >> $GITHUB_OUTPUT
+          fi
+
+      # Na verificação diária, se não houver nada novo, os passos seguintes são saltados
+      - name: Decidir se compila
+        id: go
+        shell: bash
+        run: |
+          if [ "${{ github.event_name }}" != "schedule" ] || [ "${{ steps.extractor.outputs.updated }}" = "true" ]; then
+            echo "build=true" >> $GITHUB_OUTPUT
+          else
+            echo "Sem novidades no extractor; nada a fazer."
+            echo "build=false" >> $GITHUB_OUTPUT
+          fi
+
       - uses: actions/setup-java@v4
+        if: steps.go.outputs.build == 'true'
         with:
           distribution: temurin
           java-version: 17
       - uses: gradle/actions/setup-gradle@v4
+        if: steps.go.outputs.build == 'true'
+
       - name: Build
+        if: steps.go.outputs.build == 'true'
         shell: bash
         run: |
           chmod +x gradlew
@@ -26,21 +73,33 @@ jobs:
           ./gradlew assembleDebug --console=plain 2>&1 | tee build.log || {
             # Em caso de erro, resume as linhas importantes numa "anotação"
             # (aparece no topo da página do build e é fácil de ler)
-            msg=$(grep -E "^e: |What went wrong|Could not|error:|> " build.log | head -40 | sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g')
+            msg=$(grep -E -A4 "^e: |What went wrong|Could not resolve|error:" build.log | grep -v "^> Task" | head -60 | sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g')
             echo "::error title=Build falhou::$msg"
             exit 1
           }
-      - uses: actions/upload-artifact@v4
-        with:
-          name: MeuTube-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
-      # Publica o APK numa Release chamada "latest" (substitui a anterior),
-      # para o descarregares direto no telemóvel, sem .zip
+
+      # Só guarda a versão nova do extractor no código se compilou bem
+      - name: Guardar atualização do extractor
+        if: steps.go.outputs.build == 'true' && steps.extractor.outputs.updated == 'true'
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git commit -am "Atualizar NewPipeExtractor para ${{ steps.extractor.outputs.version }}"
+          git push
+
+      # Publica o APK na Release "latest" (substitui a anterior), para o
+      # descarregares direto no telemóvel, sempre no mesmo link
       - name: Publicar APK
-        if: github.ref == 'refs/heads/main'
+        if: steps.go.outputs.build == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+        shell: bash
         run: |
           cp app/build/outputs/apk/debug/app-debug.apk MeuTube.apk
+          notes="Build automático do commit ${GITHUB_SHA::7}"
+          if [ "${{ steps.extractor.outputs.updated }}" = "true" ]; then
+            notes="$notes — extractor atualizado para ${{ steps.extractor.outputs.version }}"
+          fi
           gh release delete latest --yes --cleanup-tag || true
-          gh release create latest MeuTube.apk --title "MeuTube (última versão)" --notes "Build automático do commit ${GITHUB_SHA::7}"
+          gh release create latest MeuTube.apk --title "MeuTube (última versão)" --notes "$notes"

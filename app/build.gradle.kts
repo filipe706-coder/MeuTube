@@ -12,12 +12,31 @@ android {
         applicationId = "pt.meutube"
         minSdk = 24
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1"
+        // No GitHub, cada build tem um número (1, 2, 3...). Usamo-lo como versão
+        // para o Android saber que a APK nova é mais recente que a instalada.
+        versionCode = System.getenv("GITHUB_RUN_NUMBER")?.toIntOrNull() ?: 1
+        versionName = "0.2." + (System.getenv("GITHUB_RUN_NUMBER") ?: "local")
+    }
+
+    // Chave fixa para assinar a app. Tem de ser SEMPRE a mesma: o Android só
+    // aceita instalar uma atualização por cima se vier assinada pela mesma chave.
+    // (Sem isto, cada build do GitHub gerava uma chave nova e terias de
+    // desinstalar a app — perdendo as subscrições — a cada atualização.)
+    signingConfigs {
+        create("meutube") {
+            storeFile = file("meutube.keystore")
+            storePassword = "meutube123"
+            keyAlias = "meutube"
+            keyPassword = "meutube123"
+        }
     }
 
     buildTypes {
+        debug {
+            signingConfig = signingConfigs.getByName("meutube")
+        }
         release {
+            signingConfig = signingConfigs.getByName("meutube")
             isMinifyEnabled = false
         }
     }

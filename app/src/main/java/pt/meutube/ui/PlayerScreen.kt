@@ -189,7 +189,7 @@ fun PlayerScreen(url: String, onOpen: (String) -> Unit) {
                     modifier = Modifier.padding(start = 12.dp, top = 16.dp, bottom = 4.dp),
                 )
             }
-            items(d.related, key = { it.url }) { v -> VideoRow(v) { onOpen(v.url) } }
+            items(d.related.distinctBy { it.url }, key = { it.url }) { v -> VideoRow(v) { onOpen(v.url) } }
         }
     }
 }
@@ -199,7 +199,7 @@ fun PlayerScreen(url: String, onOpen: (String) -> Unit) {
  * toca os dois ao mesmo tempo, como se fossem um só ficheiro.
  */
 @OptIn(UnstableApi::class)
-private fun buildSource(q: Quality, ds: OkHttpDataSource.Factory): MediaSource {
+internal fun buildSource(q: Quality, ds: OkHttpDataSource.Factory): MediaSource {
     val factory = ProgressiveMediaSource.Factory(ds)
     val video = factory.createMediaSource(MediaItem.fromUri(q.videoUrl))
     val audioUrl = q.audioUrl ?: return video

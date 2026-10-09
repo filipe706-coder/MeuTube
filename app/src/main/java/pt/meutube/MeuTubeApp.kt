@@ -4,6 +4,7 @@ import android.app.Application
 import org.schabi.newpipe.extractor.NewPipe
 import org.schabi.newpipe.extractor.localization.ContentCountry
 import org.schabi.newpipe.extractor.localization.Localization
+import pt.meutube.data.FeedManager
 import pt.meutube.data.OkHttpDownloader
 import pt.meutube.data.Storage
 
@@ -21,5 +22,6 @@ class MeuTubeApp : Application() {
             ContentCountry("PT"),
         )
         Storage.init(this)
+        FeedManager.loadCache() // mostra logo o último feed guardado
     }
 }
