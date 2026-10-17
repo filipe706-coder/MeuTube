@@ -24,6 +24,9 @@ Só para uso pessoal. Não publiques nem distribuas: viola os Termos do YouTube.
 app/src/main/java/pt/meutube/
 ├── MeuTubeApp.kt          Arranque: liga o extractor ao nosso cliente HTTP
 ├── MainActivity.kt        Navegação entre ecrãs + barra de baixo
+├── playback/
+│   ├── AppPlayer.kt         O player partilhado (continua a tocar fora do ecrã)
+│   └── PlaybackService.kt   Serviço + notificação para tocar com a app minimizada
 ├── data/
 │   ├── OkHttpDownloader.kt  "Ponte": o extractor pede, nós fazemos o pedido HTTP
 │   ├── YouTubeRepo.kt       Pesquisa, vídeo (links dos streams), canal, feed

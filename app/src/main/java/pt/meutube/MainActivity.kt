@@ -1,9 +1,14 @@
 package pt.meutube
 
+import android.Manifest
+import android.content.ComponentName
+import android.content.pm.PackageManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
@@ -23,12 +28,18 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.core.content.ContextCompat
+import androidx.media3.session.MediaController
+import androidx.media3.session.SessionToken
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.google.common.util.concurrent.ListenableFuture
 import pt.meutube.data.FeedManager
+import pt.meutube.playback.AppPlayer
+import pt.meutube.playback.PlaybackService
 import pt.meutube.ui.FeedScreen
 import pt.meutube.ui.HistoryScreen
 import pt.meutube.ui.LibraryScreen
@@ -49,8 +60,29 @@ import pt.meutube.ui.SubscriptionsScreen
  *   subs, history, playlist/{nome}        ← abertos a partir da Biblioteca
  */
 class MainActivity : ComponentActivity() {
+
+    // Ligação ao serviço de reprodução. Enquanto a app está aberta, mantemos
+    // esta ligação: é ela que "acorda" o serviço e lhe permite mostrar a notificação.
+    private var controller: ListenableFuture<MediaController>? = null
+
+    // Pedido de autorização para notificações (obrigatório no Android 13+;
+    // sem isto o som continua, mas a notificação com os controlos não aparece)
+    private val askNotifications =
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        val token = SessionToken(this, ComponentName(this, PlaybackService::class.java))
+        controller = MediaController.Builder(this, token).buildAsync()
+
+        if (Build.VERSION.SDK_INT >= 33 &&
+            ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            askNotifications.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+
         setContent {
             val colors = if (isSystemInDarkTheme()) darkColorScheme() else lightColorScheme()
             MaterialTheme(colorScheme = colors) { App() }
@@ -64,6 +96,26 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         FeedManager.refreshIfStale()
+    }
+
+    /** A app voltou a estar visível: volta a mostrar o vídeo. */
+    override fun onStart() {
+        super.onStart()
+        AppPlayer.setVideoEnabled(true)
+    }
+
+    /**
+     * A app foi minimizada (ou o ecrã desligou-se): o som continua,
+     * mas desligamos a imagem para poupar dados e bateria.
+     */
+    override fun onStop() {
+        super.onStop()
+        AppPlayer.setVideoEnabled(false)
+    }
+
+    override fun onDestroy() {
+        controller?.let { MediaController.releaseFuture(it) }
+        super.onDestroy()
     }
 }
 

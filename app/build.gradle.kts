@@ -71,6 +71,8 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:1.5.1")
     implementation("androidx.media3:media3-ui:1.5.1")
     implementation("androidx.media3:media3-datasource-okhttp:1.5.1")
+    // "Sessão" de media: notificação com controlos e tocar com a app minimizada
+    implementation("androidx.media3:media3-session:1.5.1")
 
     // Interface (Jetpack Compose)
     implementation(platform("androidx.compose:compose-bom:2024.12.01"))
@@ -80,6 +82,7 @@ dependencies {
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.navigation:navigation-compose:2.8.5")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
 
     // Carregar miniaturas a partir de URLs
     implementation("io.coil-kt:coil-compose:2.7.0")

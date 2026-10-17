@@ -1,6 +1,7 @@
 package pt.meutube.ui
 
 import android.content.res.Configuration
+import android.net.Uri
 import androidx.annotation.OptIn
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -39,9 +40,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
-import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.MediaSource
 import androidx.media3.exoplayer.source.MergingMediaSource
 import androidx.media3.exoplayer.source.ProgressiveMediaSource
@@ -55,6 +56,7 @@ import pt.meutube.data.Storage
 import pt.meutube.data.VideoDetails
 import pt.meutube.data.VideoItem
 import pt.meutube.data.YouTubeRepo
+import pt.meutube.playback.AppPlayer
 
 /**
  * Ecrã do vídeo. O fluxo é:
@@ -75,9 +77,20 @@ fun PlayerScreen(url: String, onOpen: (String) -> Unit) {
     var error by remember { mutableStateOf<String?>(null) }
     var quality by remember { mutableStateOf<Quality?>(null) }
 
-    // O player vive enquanto este ecrã existir e é libertado ao sair
-    val player = remember { ExoPlayer.Builder(context).build() }
-    DisposableEffect(Unit) { onDispose { player.release() } }
+    // O player é o partilhado (AppPlayer), para continuar a tocar com a app
+    // minimizada. Ao SAIR deste ecrã (voltar atrás), o vídeo para — mas só se
+    // ainda for "nosso": se abriste um vídeo sugerido, o ecrã novo já é o dono.
+    val player = remember { AppPlayer.get(context) }
+    val token = remember { Any() }
+    DisposableEffect(Unit) {
+        onDispose {
+            if (AppPlayer.owner === token) {
+                player.stop()
+                player.clearMediaItems()
+                AppPlayer.owner = null
+            }
+        }
+    }
 
     // Fonte de dados: o mesmo OkHttp e User-Agent que usamos para o resto
     val dataSource = remember {
@@ -104,8 +117,17 @@ fun PlayerScreen(url: String, onOpen: (String) -> Unit) {
     // 2. Sempre que a qualidade muda, troca o stream mas mantém o tempo
     LaunchedEffect(quality) {
         val q = quality ?: return@LaunchedEffect
-        val position = player.currentPosition
-        player.setMediaSource(buildSource(q, dataSource))
+        val d = details ?: return@LaunchedEffect
+        // Só mantém o tempo se for o MESMO vídeo (mudança de qualidade)
+        val position = if (AppPlayer.owner === token) player.currentPosition else 0L
+        AppPlayer.owner = token
+        // Título, canal e miniatura: é o que aparece na notificação e no ecrã de bloqueio
+        val meta = MediaMetadata.Builder()
+            .setTitle(d.title)
+            .setArtist(d.uploader)
+            .setArtworkUri(d.thumbnail?.let { Uri.parse(it) })
+            .build()
+        player.setMediaSource(buildSource(q, dataSource, meta))
         player.prepare()
         player.seekTo(position)
         player.playWhenReady = true
@@ -116,6 +138,7 @@ fun PlayerScreen(url: String, onOpen: (String) -> Unit) {
     val videoView: @Composable (Modifier) -> Unit = { mod ->
         AndroidView(
             factory = { PlayerView(it).apply { this.player = player } },
+            onRelease = { it.player = null }, // solta o ecrã antigo do player partilhado
             modifier = mod,
         )
     }
@@ -199,9 +222,15 @@ fun PlayerScreen(url: String, onOpen: (String) -> Unit) {
  * toca os dois ao mesmo tempo, como se fossem um só ficheiro.
  */
 @OptIn(UnstableApi::class)
-internal fun buildSource(q: Quality, ds: OkHttpDataSource.Factory): MediaSource {
+internal fun buildSource(
+    q: Quality,
+    ds: OkHttpDataSource.Factory,
+    meta: MediaMetadata = MediaMetadata.EMPTY,
+): MediaSource {
     val factory = ProgressiveMediaSource.Factory(ds)
-    val video = factory.createMediaSource(MediaItem.fromUri(q.videoUrl))
+    // A notificação lê o título/miniatura do MediaItem principal (o do vídeo)
+    val videoItem = MediaItem.Builder().setUri(q.videoUrl).setMediaMetadata(meta).build()
+    val video = factory.createMediaSource(videoItem)
     val audioUrl = q.audioUrl ?: return video
     val audio = factory.createMediaSource(MediaItem.fromUri(audioUrl))
     return MergingMediaSource(video, audio)

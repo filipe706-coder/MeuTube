@@ -30,6 +30,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LifecycleEventEffect
 import androidx.media3.common.Player
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.datasource.okhttp.OkHttpDataSource
@@ -68,6 +70,8 @@ fun ShortsPlayerScreen(startIndex: Int) {
         ExoPlayer.Builder(context).build().apply { repeatMode = Player.REPEAT_MODE_ONE }
     }
     DisposableEffect(Unit) { onDispose { player.release() } }
+    // Os shorts NÃO continuam em segundo plano (como no YouTube): pausa ao minimizar
+    LifecycleEventEffect(Lifecycle.Event.ON_STOP) { player.pause() }
     val dataSource = remember {
         OkHttpDataSource.Factory(OkHttpDownloader.client).setUserAgent(OkHttpDownloader.USER_AGENT)
     }
