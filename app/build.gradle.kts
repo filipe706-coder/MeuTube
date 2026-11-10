@@ -61,7 +61,7 @@ android {
 
 dependencies {
     // O "motor": fala com o YouTube e devolve dados e links dos streams
-    implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.27.0")
+    implementation("com.github.TeamNewPipe:NewPipeExtractor:v0.27.1")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs_nio:2.1.4")
 
     // Pedidos HTTP
